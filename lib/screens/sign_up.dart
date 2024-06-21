@@ -5,6 +5,7 @@ import 'package:mqtt_controller/widgets/text_field.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../widgets/overlay_widget.dart';
 import 'home.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -30,6 +31,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final OverlayWidget _overlayWidget = OverlayWidget(context: context);
 
     return Scaffold(
       body: Padding(
@@ -108,14 +110,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
                     try {
+                      _overlayWidget.show(
+                          widget: LoadingWidget(400, 400, _overlayWidget));
                       await authProvider.signUpWithEmailAndPassword(
                         _emailController.text,
                         _passwordController.text,
                         _usernameController.text,
                       );
+                      _overlayWidget.hide();
                       Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => HomeScreen()));
                     } catch (e) {
+                      _overlayWidget.hide();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(e.toString())),
                       );

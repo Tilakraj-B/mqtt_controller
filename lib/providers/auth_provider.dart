@@ -1,18 +1,17 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../services/firebase_auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirebaseAuthService _authService = FirebaseAuthService();
   User? _user;
   User? get user => _user;
 
   AuthProvider() {
-    _firebaseAuth.authStateChanges().listen(_onAuthStateChanged);
+    _authService.authStateChanges.listen(_onAuthStateChanged);
     _loadUser();
   }
 
@@ -20,7 +19,7 @@ class AuthProvider with ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
     if (token != null) {
-      _user = _firebaseAuth.currentUser;
+      _user = _authService.currentUser;
       notifyListeners();
     }
   }
@@ -28,12 +27,16 @@ class AuthProvider with ChangeNotifier {
   Future<void> signUpWithEmailAndPassword(
       String email, String password, String username) async {
     try {
-      UserCredential userCredential = await _firebaseAuth
-          .createUserWithEmailAndPassword(email: email, password: password);
-      await _saveUserToken(userCredential.user);
-      await _saveUsername(username, userCredential.user!.uid);
+      User? user =
+          await _authService.signUpWithEmailAndPassword(email, password);
+      if (user != null) {
+        await _saveUserToken(user);
+        await _saveUsername(username, user.uid);
+      }
     } on FirebaseAuthException catch (e) {
-      await _deleteUser(_firebaseAuth.currentUser!);
+      if (_authService.currentUser != null) {
+        await _authService.deleteUser(_authService.currentUser!);
+      }
       print(e);
       throw e.message ?? 'An unknown error occurred';
     }
@@ -41,16 +44,16 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     try {
-      UserCredential userCredential = await _firebaseAuth
-          .signInWithEmailAndPassword(email: email, password: password);
-      await _saveUserToken(userCredential.user);
+      User? user =
+          await _authService.signInWithEmailAndPassword(email, password);
+      await _saveUserToken(user);
     } on FirebaseAuthException catch (e) {
       throw e.message ?? 'An unknown error occurred';
     }
   }
 
   Future<void> signOut() async {
-    await _firebaseAuth.signOut();
+    await _authService.signOut();
     await _clearUserToken();
     _user = null;
     notifyListeners();
@@ -58,36 +61,25 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser!.authentication;
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      UserCredential userCredential =
-          await _firebaseAuth.signInWithCredential(credential);
-      await _saveUserToken(userCredential.user);
-      await _saveUsername(
-          userCredential.user!.displayName!, userCredential.user!.uid);
+      User? user = await _authService.signInWithGoogle();
+      if (user != null) {
+        await _saveUserToken(user);
+        await _saveUsername(user.displayName!, user.uid);
+      }
     } catch (e) {
-      throw 'Google sign-in failed';
+      throw 'Google sign-in failed: $e';
     }
   }
 
   Future<void> signInWithFacebook() async {
     try {
-      final LoginResult result = await FacebookAuth.instance.login();
-      final OAuthCredential facebookAuthCredential =
-          FacebookAuthProvider.credential(result.accessToken!.tokenString);
-      UserCredential userCredential =
-          await _firebaseAuth.signInWithCredential(facebookAuthCredential);
-      await _saveUserToken(userCredential.user);
-      await _saveUsername(
-          userCredential.user!.displayName!, userCredential.user!.uid);
+      User? user = await _authService.signInWithFacebook();
+      if (user != null) {
+        await _saveUserToken(user);
+        await _saveUsername(user.displayName!, user.uid);
+      }
     } catch (e) {
-      print(e);
-      throw 'Facebook sign-in failed';
+      throw 'Facebook sign-in failed: $e';
     }
   }
 
@@ -113,15 +105,7 @@ class AuthProvider with ChangeNotifier {
           .doc(uid)
           .set({'username': username});
     } catch (e) {
-      throw 'Failed to save username';
-    }
-  }
-
-  Future<void> _deleteUser(User user) async {
-    try {
-      await user.delete();
-    } catch (e) {
-      throw 'Failed to delete user';
+      throw 'Failed to save username: $e';
     }
   }
 

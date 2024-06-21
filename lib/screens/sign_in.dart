@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mqtt_controller/screens/sign_up.dart';
+import 'package:mqtt_controller/widgets/overlay_widget.dart';
 import 'package:mqtt_controller/widgets/text_field.dart';
 import 'package:provider/provider.dart';
 
@@ -27,6 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final OverlayWidget _overlayWidget = OverlayWidget(context: context);
 
     return Scaffold(
       body: Padding(
@@ -111,11 +113,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: () async {
                           try {
+                            _overlayWidget.show(
+                                widget:
+                                    LoadingWidget(400, 400, _overlayWidget));
                             await authProvider.signInWithGoogle();
+                            _overlayWidget.hide();
                             Navigator.of(context).pushReplacement(
                                 MaterialPageRoute(
                                     builder: (_) => HomeScreen()));
                           } catch (e) {
+                            _overlayWidget.hide();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(e.toString())),
                             );
